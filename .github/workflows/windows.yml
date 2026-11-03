@@ -55,7 +55,7 @@ jobs:
           cargo --version
 
       - name: Cache compiled dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f333
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           workspaces: source -> target
           key: windows-pr-5146
