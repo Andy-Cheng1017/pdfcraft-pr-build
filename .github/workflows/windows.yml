@@ -1,0 +1,115 @@
+name: Build PdfCraft PR 5146
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pdfcraft-pr-5146
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: source
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-C target-feature=+crt-static"
+      PDFCRAFT_REQUIRE_WINRES: "1"
+      CRAFT_FONTS_REQUIRED: "1"
+      CRAFT_FONTS_DIR: ${{ github.workspace }}\craft-fonts
+      PDFCRAFT_SYSTEM_FONTS: "0"
+    steps:
+      - name: Check out the exact PR revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: storytold/pdfcraft
+          ref: a49fc0e9f9753928b8affbb6c41faf212654db27
+          path: source
+          persist-credentials: false
+
+      - name: Check out the matching open-source fonts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: storytold/craft-fonts
+          ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+          path: craft-fonts
+          persist-credentials: false
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default stable
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustc --version
+          cargo --version
+
+      - name: Cache compiled dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f333
+        with:
+          workspaces: source -> target
+          key: windows-pr-5146
+
+      - name: Test selection normalization
+        run: |
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --lib a_selection_is_a_search_phrase_on_one_line
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test selection search anchoring
+        run: |
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --lib find_for_a_selection_searches_from_
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test Ctrl+F end to end
+        run: |
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --test it find_shortcut_
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build the desktop application
+        run: |
+          cargo build --locked --release --target x86_64-pc-windows-msvc -p pdfcraft
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Stage application and required notices
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = New-Item -ItemType Directory -Force dist
+          Copy-Item target\x86_64-pc-windows-msvc\release\pdfcraft.exe $out
+          foreach ($file in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md') {
+            Copy-Item $file $out
+          }
+          Copy-Item assets\app-icon\LICENSE-document.txt $out
+          Copy-Item -Recurse licenses (Join-Path $out 'licenses')
+          . .\packaging\windows\font-notices.ps1
+          $notices = @(Get-CraftFontNotices $env:CRAFT_FONTS_DIR $true)
+          foreach ($notice in $notices) {
+            Copy-Item -LiteralPath $notice.FullName -Destination (Join-Path $out "OFL-$($notice.Directory.Name).txt")
+          }
+          @(
+            'Unofficial, unsigned Windows x64 test build of PdfCraft PR #5146.'
+            'Source: https://github.com/storytold/pdfcraft/pull/5146'
+            'Commit: a49fc0e9f9753928b8affbb6c41faf212654db27'
+            'Based on version 0.16.1, not the current official release.'
+            'OCR models are not included. Test with copies of documents.'
+            'Extract the entire artifact before launching pdfcraft.exe.'
+          ) | Set-Content -Encoding utf8 (Join-Path $out 'BUILD-INFO.txt')
+          $hash = Get-FileHash (Join-Path $out 'pdfcraft.exe') -Algorithm SHA256
+          "$($hash.Hash)  pdfcraft.exe" | Set-Content -Encoding ascii (Join-Path $out 'SHA256SUMS.txt')
+
+      - name: Upload the tested application
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: pdfcraft-pr-5146-windows-x64
+          path: source\dist\*
+          if-no-files-found: error
+          retention-days: 7
