@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Andy-Cheng1017/pdfcraft
-          ref: feat/search-experience
+          ref: 8038414b37e149494b9614d3159b8b9b497b2456
           path: source
           persist-credentials: false
 
