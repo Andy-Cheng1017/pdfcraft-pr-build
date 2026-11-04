@@ -1,4 +1,4 @@
-name: Build PdfCraft PR 5146
+name: Build PdfCraft personal fork
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pdfcraft-pr-5146
+  group: pdfcraft-search-experience
   cancel-in-progress: false
 
 jobs:
@@ -29,11 +29,11 @@ jobs:
       CRAFT_FONTS_DIR: ${{ github.workspace }}\craft-fonts
       PDFCRAFT_SYSTEM_FONTS: "0"
     steps:
-      - name: Check out the exact PR revision
+      - name: Check out the fork revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          repository: storytold/pdfcraft
-          ref: a49fc0e9f9753928b8affbb6c41faf212654db27
+          repository: Andy-Cheng1017/pdfcraft
+          ref: feat/search-experience
           path: source
           persist-credentials: false
 
@@ -53,26 +53,49 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           rustc --version
           cargo --version
+          rustup component add rustfmt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Cache compiled dependencies
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           workspaces: source -> target
-          key: windows-pr-5146
+          key: windows-search-experience
 
-      - name: Test selection normalization
+      - name: Check formatting and regenerate attribution
+        run: |
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo xtask assets --write
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload generated attribution
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: generated-attribution
+          path: source\ATTRIBUTION.md
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Test selected-text search normalization and anchoring
         run: |
           cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --lib a_selection_is_a_search_phrase_on_one_line
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Test selection search anchoring
-        run: |
           cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --lib find_for_a_selection_searches_from_
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Test Ctrl+F end to end
+      - name: Test search-result positioning
         run: |
-          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --test it find_shortcut_
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --lib search_centres_the_match_on_a_rotated_view
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --lib a_match_with_unbounded_glyphs_falls_back_to_its_page
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --test search_position
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test Ctrl+F selection search end to end
+        run: |
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --test it find_shortcut_searches_
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build the desktop application
@@ -96,10 +119,10 @@ jobs:
             Copy-Item -LiteralPath $notice.FullName -Destination (Join-Path $out "OFL-$($notice.Directory.Name).txt")
           }
           @(
-            'Unofficial, unsigned Windows x64 test build of PdfCraft PR #5146.'
-            'Source: https://github.com/storytold/pdfcraft/pull/5146'
-            'Commit: a49fc0e9f9753928b8affbb6c41faf212654db27'
-            'Based on version 0.16.1, not the current official release.'
+            'Unofficial, unsigned Windows x64 test build from the PdfCraft personal fork.'
+            'Source: https://github.com/Andy-Cheng1017/pdfcraft/tree/feat/search-experience'
+            "Commit: $(git rev-parse HEAD)"
+            'Includes selected-text Ctrl+F search and search-result positioning changes.'
             'OCR models are not included. Test with copies of documents.'
             'Extract the entire artifact before launching pdfcraft.exe.'
           ) | Set-Content -Encoding utf8 (Join-Path $out 'BUILD-INFO.txt')
@@ -109,7 +132,7 @@ jobs:
       - name: Upload the tested application
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: pdfcraft-pr-5146-windows-x64
+          name: pdfcraft-search-experience-windows-x64
           path: source\dist\*
           if-no-files-found: error
           retention-days: 7
