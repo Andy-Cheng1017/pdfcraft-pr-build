@@ -90,7 +90,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --lib a_match_with_unbounded_glyphs_falls_back_to_its_page
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --test search_position
+          cargo test --locked --release --target x86_64-pc-windows-msvc -p pdfcraft-ui-egui --test it search_panel_results_are_shown_after_zooming
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test Ctrl+F selection search end to end
